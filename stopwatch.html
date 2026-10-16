@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>sw.exe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#060a07;--panel:#0b120c;--fg:#b7f7c4;--dim:#4f7d5a;--accent:#39ff88;
+  --warn:#ffd23f;--bad:#ff4d6d;--good:#39ff88;--line:#183321;
+  --glow:0 0 6px rgba(57,255,136,.6),0 0 24px rgba(57,255,136,.25);
+}
+[data-theme=amber]{
+  --bg:#0b0804;--panel:#120d06;--fg:#ffd59a;--dim:#8a6a3a;--accent:#ffb000;
+  --good:#c6ff6b;--line:#3a2a12;--glow:0 0 6px rgba(255,176,0,.6),0 0 24px rgba(255,176,0,.25);
+}
+[data-theme=dracula]{
+  --bg:#191a21;--panel:#22232e;--fg:#f8f8f2;--dim:#6272a4;--accent:#bd93f9;
+  --warn:#f1fa8c;--bad:#ff5555;--good:#50fa7b;--line:#3a3c4e;
+  --glow:0 0 6px rgba(189,147,249,.55),0 0 24px rgba(189,147,249,.2);
+}
+[data-theme=cyber]{
+  --bg:#07040d;--panel:#0e0818;--fg:#e9d9ff;--dim:#6e5a8f;--accent:#ff2bd6;
+  --warn:#fff200;--bad:#ff3860;--good:#00ffa3;--line:#2a1a40;
+  --glow:0 0 6px rgba(255,43,214,.6),0 0 24px rgba(255,43,214,.25);
+}
+[data-theme=claude]{
+  --bg:#141413;--panel:#1f1e1d;--fg:#faf9f5;--dim:#8b887f;--accent:#d97757;
+  --warn:#e9b35f;--bad:#e5615b;--good:#6bbf7a;--line:#3a3935;
+  --glow:none;
+}
+/* claude: soft, rounded, calm — no CRT, no neon */
+[data-theme=claude] body::before{display:none}
+[data-theme=claude] .win{border-radius:12px;border-color:var(--line);overflow:hidden}
+[data-theme=claude] .titlebar{border-bottom-color:var(--line)}
+[data-theme=claude] .clock{font-weight:700;text-shadow:none;color:var(--fg)}
+[data-theme=claude] .clock .ms{color:var(--accent);opacity:1}
+[data-theme=claude] .clock.glitch{animation:pop .25s ease-out}
+@keyframes pop{50%{transform:scale(1.02)}}
+[data-theme=claude] .btn{border-radius:8px}
+[data-theme=claude] .btn.primary{background:var(--accent);border-color:var(--accent);color:#141413}
+[data-theme=claude] .btn.primary kbd{color:rgba(20,20,19,.6)}
+[data-theme=claude] .running .btn.primary{background:transparent;color:var(--accent);border-color:var(--accent)}
+[data-theme=claude] .running .btn.primary kbd{color:var(--dim)}
+[data-theme=claude] .btn:hover:not(:disabled){box-shadow:none}
+[data-theme=claude] .summary div{border-style:solid;border-radius:8px}
+[data-theme=claude] .state{letter-spacing:.02em;font-size:13px}
+[data-theme=claude] .state b{font-weight:400;color:var(--fg)}
+[data-theme=claude] .running .state b{color:var(--accent)}
+[data-theme=claude] .toast{border-radius:6px}
+#spin{display:inline-block;min-width:1ch}
+[data-theme=claude] #spin{color:var(--accent)}
+.hint{display:none;font-size:11.5px;color:var(--dim);margin-top:14px}
+[data-theme=claude] .hint{display:block}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{
+  background:var(--bg);color:var(--fg);
+  font-family:'JetBrains Mono',ui-monospace,Consolas,'Courier New',monospace;
+  font-size:14px;line-height:1.5;overflow-x:hidden;transition:background .3s,color .3s;
+}
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:50;
+  background:repeating-linear-gradient(to bottom,rgba(255,255,255,.025) 0 1px,transparent 1px 3px);
+}
+::selection{background:var(--accent);color:var(--bg)}
+
+.win{
+  max-width:640px;margin:40px auto;border:1px solid var(--line);background:var(--panel);
+  box-shadow:0 30px 80px rgba(0,0,0,.6);
+}
+.titlebar{
+  display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--line);
+  color:var(--dim);font-size:12px;user-select:none;
+}
+.dots{display:flex;gap:7px}
+.dots i{width:11px;height:11px;border-radius:50%;display:block;background:#ff5f57}
+.dots i:nth-child(2){background:#febc2e}.dots i:nth-child(3){background:#28c840}
+.titlebar .t{flex:1}
+.link{font:inherit;font-size:12px;background:none;border:0;color:var(--dim);cursor:pointer;padding:0}
+.link:hover{color:var(--accent)}
+
+/* clock */
+.top{padding:36px 24px 28px;text-align:center}
+.state{font-size:12px;letter-spacing:.12em;color:var(--dim);height:18px}
+.state b{font-weight:700}
+.running .state b{color:var(--good)}
+.paused .state b{color:var(--warn)}
+.clock{
+  margin:10px 0 28px;font-weight:800;letter-spacing:-.02em;color:var(--accent);
+  text-shadow:var(--glow);font-variant-numeric:tabular-nums;white-space:nowrap;
+  font-size:clamp(44px,13vw,88px);line-height:1;
+}
+.clock .sep{opacity:.5}
+.clock .ms{font-size:.5em;opacity:.8}
+.paused .clock{animation:blink 1.2s steps(1) infinite}
+@keyframes blink{50%{opacity:.35}}
+.clock.glitch{animation:glitch .22s steps(2) 1}
+@keyframes glitch{
+  0%{transform:translate(2px,-1px);text-shadow:-3px 0 var(--bad),3px 0 var(--accent)}
+  50%{transform:translate(-2px,1px);text-shadow:3px 0 var(--bad),-3px 0 var(--accent)}
+  100%{transform:none}
+}
+
+.controls{display:grid;grid-template-columns:1fr 1.6fr 1fr;gap:10px;max-width:440px;margin:0 auto}
+.btn{
+  font:inherit;font-size:14px;font-weight:700;background:transparent;color:var(--fg);
+  border:1px solid var(--line);padding:14px 8px 10px;cursor:pointer;transition:all .12s;
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+}
+.btn kbd{font:inherit;font-size:10px;font-weight:400;color:var(--dim)}
+.btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent);box-shadow:var(--glow)}
+.btn:active:not(:disabled),.btn.flash{transform:translateY(1px);background:var(--accent);color:var(--bg)}
+.btn:active kbd,.btn.flash kbd{color:var(--bg)}
+.btn:disabled{opacity:.3;cursor:default}
+.btn.primary{border-color:var(--accent);color:var(--accent);font-size:16px}
+.running .btn.primary{border-color:var(--warn);color:var(--warn)}
+
+/* laps */
+.laps{border-top:1px solid var(--line);padding:16px 24px 20px}
+.laps-head{display:flex;justify-content:space-between;align-items:baseline;color:var(--dim);font-size:12px;margin-bottom:8px}
+.laps-head .cmd{color:var(--fg)}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.summary[hidden]{display:none}
+.summary div{border:1px dashed var(--line);padding:6px 10px;font-size:12px;color:var(--dim)}
+.summary b{display:block;font-size:14px;font-variant-numeric:tabular-nums;color:var(--fg)}
+.summary .best b{color:var(--good)}.summary .worst b{color:var(--bad)}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:13px}
+th{text-align:right;font-weight:400;color:var(--dim);font-size:11px;padding:4px 6px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+td{text-align:right;padding:6px;border-bottom:1px solid var(--line)}
+tr.new td{animation:slide .25s ease-out}
+@keyframes slide{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+td.n{color:var(--dim)}
+tr.best td.split{color:var(--good)}
+tr.worst td.split{color:var(--bad)}
+.up{color:var(--bad)}.down{color:var(--good)}
+.dim{color:var(--dim)}
+.scroll{max-height:320px;overflow:auto}
+.scroll::-webkit-scrollbar{width:6px}.scroll::-webkit-scrollbar-thumb{background:var(--line)}
+.empty{color:var(--dim);text-align:center;padding:14px 0 6px;font-size:12px}
+
+.toast{
+  position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);opacity:0;
+  background:var(--accent);color:var(--bg);padding:6px 14px;font-size:12px;font-weight:700;
+  transition:all .2s;pointer-events:none;z-index:60;
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+
+@media (max-width:600px){
+  .win{margin:0;border-left:0;border-right:0;min-height:100vh}
+  .top{padding:28px 16px 22px}
+  .laps{padding:14px 16px 18px}
+}
+</style>
+</head>
+<body>
+<div class="win" id="win">
+  <div class="titlebar">
+    <div class="dots"><i></i><i></i><i></i></div>
+    <div class="t">~/stopwatch — <b>sw.exe</b></div>
+    <button class="link" id="bTheme" title="테마 변경 (T)">theme: <span id="themeName">matrix</span></button>
+  </div>
+
+  <section class="top">
+    <div class="state"><span id="spin">&gt;</span> <b id="state">IDLE</b></div>
+    <div class="clock" id="clock">
+      <span id="hh">00</span><span class="sep">:</span><span id="mm">00</span><span class="sep">:</span><span id="ss">00</span><span class="ms">.<span id="ms">000</span></span>
+    </div>
+    <div class="controls">
+      <button class="btn" id="bReset" disabled>reset<kbd>R</kbd></button>
+      <button class="btn primary" id="bToggle"><span id="lblToggle">▶ start</span><kbd>SPACE</kbd></button>
+      <button class="btn" id="bLap" disabled>lap<kbd>L</kbd></button>
+    </div>
+    <div class="hint">? space to start · l to lap · r to reset · t to switch theme</div>
+  </section>
+
+  <section class="laps">
+    <div class="laps-head">
+      <span><span class="cmd">$ laps</span> <span id="lapCount"></span></span>
+      <button class="link" id="bExport" hidden>copy JSON</button>
+    </div>
+    <div id="summary" class="summary" hidden>
+      <div class="best">best<b id="sBest">—</b></div>
+      <div>avg<b id="sMean">—</b></div>
+      <div class="worst">worst<b id="sWorst">—</b></div>
+    </div>
+    <div class="scroll" id="lapWrap"></div>
+  </section>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const pad = (n, w = 2) => String(n).padStart(w, '0');
+  const now = () => performance.now();
+
+  let running = false, t0 = 0, acc = 0, lastLapAt = 0, laps = [];
+  const elapsed = () => acc + (running ? now() - t0 : 0);
+
+  const THEMES = ['claude', 'matrix', 'amber', 'dracula', 'cyber'];
+  let theme = 'claude';
+  try { theme = localStorage.getItem('sw.theme') || 'claude'; } catch (e) {}
+  if (!THEMES.includes(theme)) theme = 'claude';
+
+  // claude theme: spinner glyphs + whimsical verbs
+  const SPIN = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];
+  const VERBS = ['Timing', 'Ticking', 'Counting', 'Clauding', 'Measuring', 'Pondering', 'Synchronizing', 'Elapsing', 'Chronographing'];
+  let verb = VERBS[0], spinI = 0, lastSpin = 0, lastVerb = 0;
+
+  function parts(ms) {
+    return { h: Math.floor(ms / 3600000), m: Math.floor(ms / 60000) % 60, s: Math.floor(ms / 1000) % 60, x: Math.floor(ms % 1000) };
+  }
+  const fmt = ms => { const p = parts(ms); return `${pad(p.h)}:${pad(p.m)}:${pad(p.s)}.${pad(p.x, 3)}`; };
+  const fmtShort = ms => { const p = parts(ms); return (p.h ? pad(p.h) + ':' : '') + `${pad(p.m)}:${pad(p.s)}.${pad(p.x, 3)}`; };
+
+  // ---------- actions ----------
+  function toggle() {
+    if (running) { acc += now() - t0; running = false; }
+    else { running = true; t0 = now(); }
+    sync();
+  }
+  function lap() {
+    if (!running) return;
+    const e = elapsed();
+    laps.push({ n: laps.length + 1, split: e - lastLapAt, total: e });
+    lastLapAt = e;
+    glitch();
+    renderLaps();
+  }
+  function reset() {
+    if (running || (!acc && !laps.length)) return;
+    acc = 0; lastLapAt = 0; laps = [];
+    renderLaps(); sync(); draw();
+  }
+  function exportJSON() {
+    const json = JSON.stringify({
+      elapsedMs: +elapsed().toFixed(3),
+      laps: laps.map(l => ({ n: l.n, split: fmtShort(l.split), total: fmt(l.total), splitMs: +l.split.toFixed(3) })),
+    }, null, 2);
+    const ok = () => toast('copied to clipboard ✓');
+    if (navigator.clipboard) navigator.clipboard.writeText(json).then(ok, () => toast('clipboard blocked'));
+    else toast('clipboard unavailable');
+  }
+  function setTheme(t) {
+    theme = t;
+    if (t === 'matrix') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', t);
+    $('themeName').textContent = t;
+    try { localStorage.setItem('sw.theme', t); } catch (e) {}
+    sync();
+  }
+  const cycleTheme = () => setTheme(THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]);
+
+  function glitch() {
+    const c = $('clock');
+    c.classList.remove('glitch'); void c.offsetWidth; c.classList.add('glitch');
+  }
+  function flash(id) {
+    const b = $(id); if (b.disabled) return;
+    b.classList.add('flash'); setTimeout(() => b.classList.remove('flash'), 120);
+  }
+  let toastT;
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 1400);
+  }
+
+  // ---------- render ----------
+  function sync() {
+    const paused = !running && acc > 0;
+    const win = $('win');
+    win.classList.toggle('running', running);
+    win.classList.toggle('paused', paused);
+    if (theme === 'claude') {
+      $('spin').textContent = running ? SPIN[spinI] : paused ? '⏸' : '✻';
+      $('state').textContent = running ? `${verb}… ` : paused ? 'Paused · space to resume' : 'Ready when you are';
+    } else {
+      $('spin').textContent = '>';
+      $('state').textContent = running ? 'RUNNING' : paused ? 'PAUSED' : 'IDLE';
+    }
+    $('lblToggle').textContent = running ? '❚❚ pause' : paused ? '▶ resume' : '▶ start';
+    $('bLap').disabled = !running;
+    $('bReset').disabled = running || (!acc && !laps.length);
+  }
+
+  const el = { hh: $('hh'), mm: $('mm'), ss: $('ss'), ms: $('ms') };
+  function draw() {
+    const p = parts(elapsed());
+    el.hh.textContent = pad(p.h); el.mm.textContent = pad(p.m);
+    el.ss.textContent = pad(p.s); el.ms.textContent = pad(p.x, 3);
+  }
+
+  function renderLaps() {
+    const wrap = $('lapWrap');
+    $('lapCount').textContent = laps.length ? `(${laps.length})` : '';
+    $('bExport').hidden = !laps.length;
+    $('summary').hidden = laps.length < 2;
+    if (!laps.length) {
+      wrap.innerHTML = '<div class="empty">no laps yet — press <b>L</b> while running</div>';
+      return;
+    }
+    const splits = laps.map(l => l.split);
+    const min = Math.min(...splits), max = Math.max(...splits);
+    $('sBest').textContent = fmtShort(min);
+    $('sWorst').textContent = fmtShort(max);
+    $('sMean').textContent = fmtShort(splits.reduce((a, b) => a + b, 0) / splits.length);
+
+    let rows = '';
+    for (let i = laps.length - 1; i >= 0; i--) {
+      const l = laps[i], prev = laps[i - 1];
+      let cls = i === laps.length - 1 ? 'new' : '';
+      if (laps.length > 1 && l.split === min) cls += ' best';
+      else if (laps.length > 1 && l.split === max) cls += ' worst';
+      let delta = '<span class="dim">—</span>';
+      if (prev) {
+        const d = (l.split - prev.split) / 1000;
+        delta = `<span class="${d > 0 ? 'up' : 'down'}">${d > 0 ? '+' : ''}${d.toFixed(3)}s</span>`;
+      }
+      rows += `<tr class="${cls}"><td class="n">#${pad(l.n)}</td><td class="split">${fmtShort(l.split)}</td><td>${delta}</td><td class="dim">${fmtShort(l.total)}</td></tr>`;
+    }
+    wrap.innerHTML = `<table><thead><tr><th>lap</th><th>split</th><th>Δ prev</th><th>total</th></tr></thead><tbody>${rows}</tbody></table>`;
+    wrap.scrollTop = 0;
+  }
+
+  let lastTitle = 0;
+  function loop(t) {
+    draw();
+    if (theme === 'claude' && running) {
+      if (t - lastSpin > 120) { spinI = (spinI + 1) % SPIN.length; $('spin').textContent = SPIN[spinI]; lastSpin = t; }
+      if (t - lastVerb > 3000) {
+        verb = VERBS[Math.floor(Math.random() * VERBS.length)];
+        $('state').textContent = `${verb}… `; lastVerb = t;
+      }
+    }
+    if (t - lastTitle > 100) {
+      document.title = running ? `▶ ${fmt(elapsed()).slice(0, -2)}` : acc ? `❚❚ ${fmt(acc).slice(0, -2)}` : 'sw.exe';
+      lastTitle = t;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- input ----------
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (k === ' ') { e.preventDefault(); flash('bToggle'); toggle(); }
+    else if (k === 'l' || k === 'enter') { e.preventDefault(); flash('bLap'); lap(); }
+    else if (k === 'r') { flash('bReset'); reset(); }
+    else if (k === 't') cycleTheme();
+  });
+  const click = fn => e => { e.currentTarget.blur(); fn(); };
+  $('bToggle').addEventListener('click', click(toggle));
+  $('bLap').addEventListener('click', click(lap));
+  $('bReset').addEventListener('click', click(reset));
+  $('bExport').addEventListener('click', click(exportJSON));
+  $('bTheme').addEventListener('click', click(cycleTheme));
+
+  setTheme(theme);
+  sync(); renderLaps();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
